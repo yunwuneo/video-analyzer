@@ -55,6 +55,84 @@ video-analyzer-ui --host 0.0.0.0 --port 5000
 - `--log-file`: Log file path
 - `--config`: Custom config file path
 
+## External API
+
+The UI server also exposes an authenticated JSON API under `/api/v1`. API access is disabled until at least one bearer token is configured.
+
+### Configuration
+
+```bash
+export VIDEO_ANALYZER_API_KEY="replace-with-a-long-random-token"
+# or multiple comma-separated tokens:
+export VIDEO_ANALYZER_API_KEYS="token-one,token-two"
+
+# Optional, defaults to 30/minute per token and client IP.
+export VIDEO_ANALYZER_API_RATE_LIMIT="30/minute"
+
+# Optional, defaults to 512 MB.
+export VIDEO_ANALYZER_MAX_UPLOAD_MB="512"
+
+video-analyzer-ui --host 0.0.0.0 --port 5000
+```
+
+Supported rate-limit windows are `second`, `minute`, and `hour`, for example `5/minute` or `100/hour`.
+
+### Start an Analysis
+
+```bash
+curl -X POST http://localhost:5000/api/v1/analyses \
+  -H "Authorization: Bearer $VIDEO_ANALYZER_API_KEY" \
+  -F "video=@/path/to/video.mp4" \
+  -F "client=ollama" \
+  -F "model=llama3.2-vision" \
+  -F "max_frames=5" \
+  -F "prompt=Describe the main actions"
+```
+
+The response is `202 Accepted` with a job ID:
+
+```json
+{
+  "id": "8fd9f9f1-4f02-4d6f-9b5d-6be905438ea1",
+  "status": "queued",
+  "links": {
+    "self": "/api/v1/analyses/8fd9f9f1-4f02-4d6f-9b5d-6be905438ea1",
+    "result": "/api/v1/analyses/8fd9f9f1-4f02-4d6f-9b5d-6be905438ea1/result"
+  }
+}
+```
+
+### Poll Status
+
+```bash
+curl http://localhost:5000/api/v1/analyses/<job-id> \
+  -H "Authorization: Bearer $VIDEO_ANALYZER_API_KEY"
+```
+
+Jobs move through `queued`, `running`, `completed`, or `failed`. The status response includes a small `log_tail` for troubleshooting without exposing the internal command.
+
+### Fetch Result
+
+```bash
+curl http://localhost:5000/api/v1/analyses/<job-id>/result \
+  -H "Authorization: Bearer $VIDEO_ANALYZER_API_KEY"
+```
+
+The result endpoint returns the same `analysis.json` structure produced by the CLI. If the job is not finished, it returns `409 Conflict`.
+
+### Cleanup
+
+```bash
+curl -X DELETE http://localhost:5000/api/v1/analyses/<job-id> \
+  -H "Authorization: Bearer $VIDEO_ANALYZER_API_KEY"
+```
+
+Cleanup removes the uploaded video and generated results for completed or failed jobs. Running jobs cannot be deleted.
+
+### Accepted Analysis Parameters
+
+The API accepts the uploaded `video` file and a safe whitelist of CLI-compatible fields: `client`, `ollama_url`, `api_key`, `api_url`, `model`, `whisper_model`, `prompt`, `language`, `device`, `max_frames`, `duration`, `temperature`, and `keep_frames`. Use underscores or hyphens in field names, for example `max_frames` or `max-frames`.
+
 ## Development Setup
 
 1. Clone the repository:

@@ -172,6 +172,28 @@ video-analyzer video.mp4 \
     --whisper-model large
 ```
 
+### External API
+
+`video-analyzer-ui` exposes an authenticated API for remote integrations under `/api/v1`. Configure `VIDEO_ANALYZER_API_KEY` or `VIDEO_ANALYZER_API_KEYS`, then run the UI server on an external interface:
+
+```bash
+export VIDEO_ANALYZER_API_KEY="replace-with-a-long-random-token"
+export VIDEO_ANALYZER_API_RATE_LIMIT="30/minute"
+video-analyzer-ui --host 0.0.0.0 --port 5000
+```
+
+Submit a video as a background analysis job:
+
+```bash
+curl -X POST http://localhost:5000/api/v1/analyses \
+    -H "Authorization: Bearer $VIDEO_ANALYZER_API_KEY" \
+    -F "video=@/path/to/video.mp4" \
+    -F "max_frames=5" \
+    -F "prompt=Describe the main actions"
+```
+
+See [video-analyzer-ui/README.md](video-analyzer-ui/README.md#external-api) for status, result, cleanup, authentication, and rate-limit details.
+
 ## Output
 
 The tool generates a JSON file (`output\analysis.json`) containing:

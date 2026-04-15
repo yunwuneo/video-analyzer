@@ -20,6 +20,7 @@ import time
 import unicodedata
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Deque, Iterable, Optional, Sequence
 
@@ -62,6 +63,8 @@ Optional batch settings:
   {ENV_PREFIX}OVERWRITE_EXISTING Replace existing result files. Default: true
   {ENV_PREFIX}CLEAN_TEMP         Clean temporary analyzer files after each video.
                                  Default: true
+  {ENV_PREFIX}VIDEOS_PER_HOUR    Maximum videos to analyze per clock hour.
+                                 Default: 0 (disabled)
   {ENV_PREFIX}ADD_CUDA_DLL_DIRS  On Windows, add NVIDIA cublas/cudnn DLL dirs
                                  from the active environment. Default: true
 
@@ -111,6 +114,7 @@ class BatchConfig:
     skip_existing: bool
     overwrite_existing: bool
     clean_temp: bool
+    videos_per_hour: int
     add_cuda_dll_dirs: bool
     config: Optional[str]
     client: Optional[str]
@@ -142,10 +146,20 @@ class BatchState:
     status: str = "Starting"
     started_at: float = 0.0
     video_started_at: float = 0.0
+    videos_per_hour: int = 0
+    hourly_processed: int = 0
+    hourly_window_start: float = 0.0
+    hourly_resume_at: float = 0.0
 
     @property
     def processed(self) -> int:
         return self.completed + self.failed + self.skipped
+
+    @property
+    def hourly_remaining(self) -> Optional[int]:
+        if self.videos_per_hour <= 0:
+            return None
+        return max(0, self.videos_per_hour - self.hourly_processed)
 
 
 def _env(
@@ -170,6 +184,23 @@ def _read_bool(name: str, default: bool, env: dict[str, str]) -> bool:
     if normalized in {"0", "false", "no", "n", "off"}:
         return False
     raise ConfigError(f"{ENV_PREFIX}{name} must be a boolean value, got {value!r}")
+
+
+def _read_non_negative_int(name: str, default: int, env: dict[str, str]) -> int:
+    value = _env(name, env=env)
+    if value is None:
+        return default
+    try:
+        parsed = int(value.strip())
+    except ValueError as exc:
+        raise ConfigError(
+            f"{ENV_PREFIX}{name} must be a non-negative integer, got {value!r}"
+        ) from exc
+    if parsed < 0:
+        raise ConfigError(
+            f"{ENV_PREFIX}{name} must be a non-negative integer, got {value!r}"
+        )
+    return parsed
 
 
 def _read_required_path(name: str, env: dict[str, str]) -> Path:
@@ -325,6 +356,7 @@ def load_config_from_env() -> BatchConfig:
         skip_existing=_read_bool("SKIP_EXISTING", True, env),
         overwrite_existing=_read_bool("OVERWRITE_EXISTING", True, env),
         clean_temp=_read_bool("CLEAN_TEMP", True, env),
+        videos_per_hour=_read_non_negative_int("VIDEOS_PER_HOUR", 0, env),
         add_cuda_dll_dirs=_read_bool("ADD_CUDA_DLL_DIRS", True, env),
         config=_env("CONFIG", env=env),
         client=_env("CLIENT", env=env),
@@ -467,6 +499,92 @@ def format_duration(seconds: float) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def format_local_time(timestamp: float) -> str:
+    return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def current_hour_start(timestamp: Optional[float] = None) -> float:
+    now = time.time() if timestamp is None else timestamp
+    current = datetime.fromtimestamp(now)
+    return current.replace(minute=0, second=0, microsecond=0).timestamp()
+
+
+def format_hourly_quota(state: BatchState) -> str:
+    if state.videos_per_hour <= 0:
+        return "Hourly quota: disabled"
+
+    window_start = state.hourly_window_start or current_hour_start()
+    window_end = window_start + 3600
+    remaining = state.hourly_remaining
+    parts = [
+        "Hourly quota: "
+        f"{state.hourly_processed}/{state.videos_per_hour} used",
+        f"{remaining} remaining",
+        f"window ends {format_local_time(window_end)}",
+    ]
+    if state.hourly_resume_at:
+        parts.append(f"resume {format_local_time(state.hourly_resume_at)}")
+    return " | ".join(parts)
+
+
+class HourlyVideoLimiter:
+    def __init__(self, limit: int, state: BatchState) -> None:
+        self.limit = limit
+        state.videos_per_hour = limit
+        if limit > 0:
+            state.hourly_window_start = current_hour_start()
+
+    def _refresh_window(self, state: BatchState) -> None:
+        if self.limit <= 0:
+            return
+        window_start = current_hour_start()
+        if state.hourly_window_start != window_start:
+            state.hourly_window_start = window_start
+            state.hourly_processed = 0
+            state.hourly_resume_at = 0.0
+
+    def wait_for_capacity(self, state: BatchState, dashboard: Dashboard) -> None:
+        if self.limit <= 0:
+            return
+
+        self._refresh_window(state)
+        if state.hourly_processed < self.limit:
+            return
+
+        resume_at = state.hourly_window_start + 3600
+        state.hourly_resume_at = resume_at
+        state.video_started_at = time.monotonic()
+        dashboard.add_log(
+            f"Hourly limit reached ({state.hourly_processed}/{self.limit}). "
+            f"Resting until {format_local_time(resume_at)}."
+        )
+
+        while True:
+            now = time.time()
+            remaining = resume_at - now
+            if remaining <= 0:
+                break
+            state.status = (
+                f"Resting until {format_local_time(resume_at)} "
+                f"({format_duration(remaining)} left)"
+            )
+            dashboard.render(force=True)
+            time.sleep(min(30.0, max(0.5, remaining)))
+
+        self._refresh_window(state)
+        state.hourly_resume_at = 0.0
+        state.status = "Resuming"
+        dashboard.add_log("Hourly rest finished; resuming analysis.")
+        dashboard.render(force=True)
+
+    def record_video_started(self, state: BatchState) -> None:
+        if self.limit <= 0:
+            return
+        self._refresh_window(state)
+        state.hourly_processed += 1
+        state.hourly_resume_at = 0.0
+
+
 class Dashboard:
     def __init__(self, state: BatchState) -> None:
         self.state = state
@@ -562,6 +680,7 @@ class Dashboard:
             f"Status: {self.state.status} | elapsed {format_duration(now - self.state.started_at)} "
             f"| current {format_duration(now - self.state.video_started_at)}"
         )
+        rows.append(self._quota_row())
         rows.append(f"Current: {self.state.current_video or '-'}")
         rows.append("")
 
@@ -579,6 +698,9 @@ class Dashboard:
         else:
             rows.append("No errors recorded.")
         return rows
+
+    def _quota_row(self) -> str:
+        return format_hourly_quota(self.state)
 
     def _tail_wrapped(self, lines: Iterable[str], width: int, max_lines: int) -> list[str]:
         wrapper = DisplayWidthWrapper(max(20, width - 2))
@@ -775,11 +897,16 @@ def run_batch(config: BatchConfig) -> int:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     videos = discover_videos(config.input_dir, config.extensions)
     state = BatchState(total=len(videos), started_at=time.monotonic())
+    limiter = HourlyVideoLimiter(config.videos_per_hour, state)
 
     with Dashboard(state) as dashboard:
         dashboard.add_log(f"Input: {config.input_dir}")
         dashboard.add_log(f"Output: {config.output_dir}")
         dashboard.add_log(f"Extensions: {', '.join(config.extensions)}")
+        if config.videos_per_hour > 0:
+            dashboard.add_log(
+                f"Hourly quota: {config.videos_per_hour} video(s) per hour."
+            )
 
         if not videos:
             state.status = "No videos found"
@@ -793,16 +920,21 @@ def run_batch(config: BatchConfig) -> int:
             target = target_path_for(config, video)
             state.current_index = index
             state.current_video = relative_video
-            state.video_started_at = time.monotonic()
 
             if config.skip_existing and target.exists():
+                state.video_started_at = time.monotonic()
                 state.skipped += 1
                 state.status = "Skipped existing result"
                 dashboard.add_log(f"Skipped existing: {relative_video} -> {target}")
                 dashboard.render(force=True)
                 continue
 
+            limiter.wait_for_capacity(state, dashboard)
+            limiter.record_video_started(state)
+            state.video_started_at = time.monotonic()
             state.status = "Analyzing"
+            if config.videos_per_hour > 0:
+                dashboard.add_log(format_hourly_quota(state))
             dashboard.add_log(f"Processing [{index}/{len(videos)}]: {relative_video}")
             dashboard.render(force=True)
 

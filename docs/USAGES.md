@@ -199,6 +199,7 @@ VIDEO_ANALYZER_BATCH_API_URL=https://api.openai.com/v1
 VIDEO_ANALYZER_BATCH_MODEL=gpt-4o
 VIDEO_ANALYZER_BATCH_DEVICE=cuda
 VIDEO_ANALYZER_BATCH_MAX_FRAMES=20
+VIDEO_ANALYZER_BATCH_VIDEOS_PER_HOUR=10
 ```
 
 Then run:
@@ -242,6 +243,7 @@ Useful optional variables:
 - `VIDEO_ANALYZER_BATCH_SKIP_EXISTING`: skip videos with an existing result, default `true`
 - `VIDEO_ANALYZER_BATCH_OVERWRITE_EXISTING`: replace existing result files, default `true`
 - `VIDEO_ANALYZER_BATCH_CLEAN_TEMP`: clean temporary analyzer files after each video, default `true`
+- `VIDEO_ANALYZER_BATCH_VIDEOS_PER_HOUR`: maximum videos to analyze per clock hour, default `0` (disabled). When the limit is reached, the batch runner rests until the next local hour. Skipped existing results do not count against the limit.
 - `VIDEO_ANALYZER_BATCH_EXTRA_ARGS`: additional shell-style arguments passed to `video-analyzer`
 - `video-analyzer-batch --help-env`: print the full environment variable reference
 

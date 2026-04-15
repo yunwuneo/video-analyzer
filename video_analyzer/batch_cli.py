@@ -28,6 +28,7 @@ ENV_PREFIX = "VIDEO_ANALYZER_BATCH_"
 ANALYSIS_FILENAME = "analysis.json"
 DEFAULT_EXTENSIONS = (".mp4", ".mkv", ".avi", ".ts")
 DEFAULT_ENV_FILES = (".env", ".env.batch", "video-analyzer-batch.env")
+DEFAULT_LANGUAGE = "zh"
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 DOTENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -78,7 +79,7 @@ Optional video-analyzer settings:
   {ENV_PREFIX}MAX_FRAMES         Value for --max-frames
   {ENV_PREFIX}LOG_LEVEL          Value for --log-level
   {ENV_PREFIX}PROMPT             Value for --prompt
-  {ENV_PREFIX}LANGUAGE           Value for --language
+  {ENV_PREFIX}LANGUAGE           Value for --language. Default: {DEFAULT_LANGUAGE}
   {ENV_PREFIX}DEVICE             Value for --device
   {ENV_PREFIX}TEMPERATURE        Value for --temperature
   {ENV_PREFIX}EXTRA_ARGS         Additional shell-style arguments.
@@ -338,7 +339,7 @@ def load_config_from_env() -> BatchConfig:
         max_frames=_env("MAX_FRAMES", env=env),
         log_level=_env("LOG_LEVEL", env=env),
         prompt=_env("PROMPT", env=env),
-        language=_env("LANGUAGE", env=env),
+        language=_env("LANGUAGE", DEFAULT_LANGUAGE, env=env),
         device=_env("DEVICE", env=env),
         temperature=_env("TEMPERATURE", env=env),
         extra_args=_split_shell_words(_env("EXTRA_ARGS", env=env)),

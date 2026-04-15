@@ -58,7 +58,7 @@ Optional batch settings:
   {ENV_PREFIX}ENV_FILE           Additional .env file path(s) to load.
   {ENV_PREFIX}COMMAND            Analyzer command. Default: video-analyzer
   {ENV_PREFIX}SKIP_EXISTING      Skip videos whose result already exists.
-                                 Default: false
+                                 Default: true
   {ENV_PREFIX}OVERWRITE_EXISTING Replace existing result files. Default: true
   {ENV_PREFIX}CLEAN_TEMP         Clean temporary analyzer files after each video.
                                  Default: true
@@ -322,7 +322,7 @@ def load_config_from_env() -> BatchConfig:
         temp_output_dir=_read_path("TEMP_OUTPUT_DIR", "./output", env),
         extensions=_read_extensions(env),
         analyzer_command=command,
-        skip_existing=_read_bool("SKIP_EXISTING", False, env),
+        skip_existing=_read_bool("SKIP_EXISTING", True, env),
         overwrite_existing=_read_bool("OVERWRITE_EXISTING", True, env),
         clean_temp=_read_bool("CLEAN_TEMP", True, env),
         add_cuda_dll_dirs=_read_bool("ADD_CUDA_DLL_DIRS", True, env),

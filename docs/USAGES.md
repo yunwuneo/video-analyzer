@@ -239,7 +239,7 @@ Useful optional variables:
 - `VIDEO_ANALYZER_BATCH_EXTENSIONS`: comma-separated extensions, default `.mp4,.mkv,.avi,.ts`
 - `VIDEO_ANALYZER_BATCH_TEMP_OUTPUT_DIR`: temporary analyzer output directory, default `./output`
 - `VIDEO_ANALYZER_BATCH_ENV_FILE`: extra `.env` file path, or multiple paths separated by the OS path separator
-- `VIDEO_ANALYZER_BATCH_SKIP_EXISTING`: skip videos with an existing result, default `false`
+- `VIDEO_ANALYZER_BATCH_SKIP_EXISTING`: skip videos with an existing result, default `true`
 - `VIDEO_ANALYZER_BATCH_OVERWRITE_EXISTING`: replace existing result files, default `true`
 - `VIDEO_ANALYZER_BATCH_CLEAN_TEMP`: clean temporary analyzer files after each video, default `true`
 - `VIDEO_ANALYZER_BATCH_EXTRA_ARGS`: additional shell-style arguments passed to `video-analyzer`

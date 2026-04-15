@@ -170,6 +170,81 @@ video-analyzer video.mp4 \
 ```
 This will extract frames evenly spaced across the video duration. For example, in a 5-minute video, it would sample approximately one frame per minute rather than taking the first 5 frames.
 
+### Batch Analyze a Video Directory
+
+`video-analyzer-batch` recursively scans a source directory, runs `video-analyzer`
+for each video, and mirrors the source folder structure into a result directory.
+Each result is saved as `<video_stem>_analysis.json`.
+
+The batch command can be configured with `.env` files or environment variables,
+so local paths and API keys do not need to be written into scripts.
+
+It automatically loads these files from the current directory when present:
+
+- `.env`
+- `.env.batch`
+- `video-analyzer-batch.env`
+
+Existing system environment variables override values from files. To load one
+or more explicit files, set `VIDEO_ANALYZER_BATCH_ENV_FILE`. Multiple paths are
+separated with `;` on Windows or `:` on macOS/Linux.
+
+Example `.env.batch`:
+```dotenv
+VIDEO_ANALYZER_BATCH_INPUT_DIR=C:\Users\zewen\repos\nodeSpider_tiktok\download\Neo
+VIDEO_ANALYZER_BATCH_OUTPUT_DIR=.\dy
+VIDEO_ANALYZER_BATCH_CLIENT=openai_api
+VIDEO_ANALYZER_BATCH_API_KEY=your-key
+VIDEO_ANALYZER_BATCH_API_URL=https://api.openai.com/v1
+VIDEO_ANALYZER_BATCH_MODEL=gpt-4o
+VIDEO_ANALYZER_BATCH_DEVICE=cuda
+VIDEO_ANALYZER_BATCH_MAX_FRAMES=20
+```
+
+Then run:
+```bash
+video-analyzer-batch
+```
+
+PowerShell:
+```powershell
+$env:VIDEO_ANALYZER_BATCH_INPUT_DIR = "C:\Users\zewen\repos\nodeSpider_tiktok\download\Neo"
+$env:VIDEO_ANALYZER_BATCH_OUTPUT_DIR = ".\dy"
+$env:VIDEO_ANALYZER_BATCH_CLIENT = "openai_api"
+$env:VIDEO_ANALYZER_BATCH_API_KEY = "your-key"
+$env:VIDEO_ANALYZER_BATCH_API_URL = "https://api.openai.com/v1"
+$env:VIDEO_ANALYZER_BATCH_MODEL = "gpt-4o"
+$env:VIDEO_ANALYZER_BATCH_DEVICE = "cuda"
+$env:VIDEO_ANALYZER_BATCH_MAX_FRAMES = "20"
+
+video-analyzer-batch
+```
+
+Bash/Zsh:
+```bash
+export VIDEO_ANALYZER_BATCH_INPUT_DIR="/path/to/videos"
+export VIDEO_ANALYZER_BATCH_OUTPUT_DIR="./dy"
+export VIDEO_ANALYZER_BATCH_CLIENT="openai_api"
+export VIDEO_ANALYZER_BATCH_API_KEY="your-key"
+export VIDEO_ANALYZER_BATCH_API_URL="https://api.openai.com/v1"
+export VIDEO_ANALYZER_BATCH_MODEL="gpt-4o"
+export VIDEO_ANALYZER_BATCH_DEVICE="cuda"
+export VIDEO_ANALYZER_BATCH_MAX_FRAMES="20"
+
+video-analyzer-batch
+```
+
+Useful optional variables:
+
+- `VIDEO_ANALYZER_BATCH_EXTENSIONS`: comma-separated extensions, default `.mp4,.mkv,.avi,.ts`
+- `VIDEO_ANALYZER_BATCH_TEMP_OUTPUT_DIR`: temporary analyzer output directory, default `./output`
+- `VIDEO_ANALYZER_BATCH_ENV_FILE`: extra `.env` file path, or multiple paths separated by the OS path separator
+- `VIDEO_ANALYZER_BATCH_SKIP_EXISTING`: skip videos with an existing result, default `false`
+- `VIDEO_ANALYZER_BATCH_OVERWRITE_EXISTING`: replace existing result files, default `true`
+- `VIDEO_ANALYZER_BATCH_CLEAN_TEMP`: clean temporary analyzer files after each video, default `true`
+- `VIDEO_ANALYZER_BATCH_EXTRA_ARGS`: additional shell-style arguments passed to `video-analyzer`
+- `video-analyzer-batch --help-env`: print the full environment variable reference
+
 ### Specific Language Processing
 ```bash
 video-analyzer video.mp4 \

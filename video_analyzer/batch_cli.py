@@ -15,9 +15,9 @@ import shutil
 import site
 import subprocess
 import sys
-import textwrap
 import threading
 import time
+import unicodedata
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -527,8 +527,8 @@ class Dashboard:
         self.last_render = now
 
         size = shutil.get_terminal_size((110, 32))
-        width = max(60, size.columns)
-        height = max(20, size.lines)
+        width = max(20, size.columns)
+        height = max(8, size.lines)
         rows = self._build_rows(width, height)
         rows = rows[:height]
         if len(rows) < height:
@@ -581,11 +581,7 @@ class Dashboard:
         return rows
 
     def _tail_wrapped(self, lines: Iterable[str], width: int, max_lines: int) -> list[str]:
-        wrapper = textwrap.TextWrapper(
-            width=max(20, width - 2),
-            replace_whitespace=False,
-            drop_whitespace=True,
-        )
+        wrapper = DisplayWidthWrapper(max(20, width - 2))
         wrapped: list[str] = []
         for line in lines:
             parts = wrapper.wrap(line) or [""]
@@ -594,11 +590,66 @@ class Dashboard:
 
     @staticmethod
     def _fit(text: str, width: int) -> str:
-        if len(text) <= width:
+        if display_width(text) <= width:
             return text
         if width <= 3:
-            return text[:width]
-        return text[: width - 3] + "..."
+            return truncate_display_width(text, width)
+        return truncate_display_width(text, width - 3) + "..."
+
+
+def char_display_width(char: str) -> int:
+    if unicodedata.combining(char):
+        return 0
+    if unicodedata.category(char) in {"Cc", "Cf"}:
+        return 0
+    if unicodedata.east_asian_width(char) in {"F", "W"}:
+        return 2
+    return 1
+
+
+def display_width(text: str) -> int:
+    return sum(char_display_width(char) for char in text)
+
+
+def truncate_display_width(text: str, max_width: int) -> str:
+    if max_width <= 0:
+        return ""
+
+    result: list[str] = []
+    used = 0
+    for char in text:
+        char_width = char_display_width(char)
+        if used + char_width > max_width:
+            break
+        result.append(char)
+        used += char_width
+    return "".join(result)
+
+
+class DisplayWidthWrapper:
+    def __init__(self, width: int) -> None:
+        self.width = max(1, width)
+
+    def wrap(self, text: str) -> list[str]:
+        chunks: list[str] = []
+        current: list[str] = []
+        current_width = 0
+
+        for char in text:
+            char_width = char_display_width(char)
+            if current and current_width + char_width > self.width:
+                chunks.append("".join(current).rstrip())
+                current = []
+                current_width = 0
+                if char.isspace():
+                    continue
+
+            current.append(char)
+            current_width += char_width
+
+        if current:
+            chunks.append("".join(current).rstrip())
+        return chunks
 
 
 def _reader_thread(stream, stream_name: str, output: "queue.Queue[tuple[str, str]]") -> None:
